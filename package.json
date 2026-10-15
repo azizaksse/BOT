@@ -1,0 +1,6 @@
+{
+  "name": "nexa-shop-bot",
+  "private": true,
+  "scripts": { "deploy-db": "convex deploy" },
+  "dependencies": { "convex": "^1.17.0" }
+}
