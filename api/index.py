@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse, HTMLResponse
 from starlette.routing import Route
 
 import core
-from config import PUBLIC_URL, SETUP_KEY, WEBHOOK_SECRET, NEXA_API_KEY, NEXA_BASE_URL
+from config import PUBLIC_URL, SETUP_KEY, WEBHOOK_SECRET
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("api")
@@ -36,17 +36,6 @@ async def telegram(request: Request):
         log.exception("update failed")
     return JSONResponse({"ok": True})
 
-
-async def cryptopay(request: Request):
-    body = await request.body()
-    if not core.verify_cryptopay(body, request.headers.get("crypto-pay-api-signature", "")):
-        return JSONResponse({"ok": False}, status_code=401)
-    try:
-        await core.handle_cryptopay(json.loads(body))
-    except Exception:
-        log.exception("cryptopay webhook failed")
-        return JSONResponse({"ok": False}, status_code=500)
-    return JSONResponse({"ok": True})
 
 # ── setup ─────────────────────────────────────────────────────────────────────
 
@@ -668,7 +657,6 @@ async def home(request: Request):
 
 app = Starlette(routes=[
     Route("/api/telegram",          telegram,       methods=["POST"]),
-    Route("/api/cryptopay",         cryptopay,      methods=["POST"]),
     Route("/api/setup",             setup,          methods=["GET"]),
     Route("/api/stats",             stats_api,      methods=["GET"]),
     Route("/api/admin/products",    products_api,   methods=["GET"]),

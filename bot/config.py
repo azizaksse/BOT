@@ -29,9 +29,6 @@ NEXA_API_KEY = _required("NEXA_API_KEY")
 BASTAHA_BASE_URL = os.getenv("BASTAHA_BASE_URL", "https://admin.bastaha.com/api/reseller")
 BASTAHA_API_KEY = os.getenv("BASTAHA_API_KEY", "")
 
-# --- CryptoBot ---
-CRYPTOPAY_TOKEN = _required("CRYPTOPAY_TOKEN")
-CRYPTOPAY_TESTNET = os.getenv("CRYPTOPAY_TESTNET", "false").lower() in ("1", "true", "yes")
 
 # --- Database (Convex) ---
 CONVEX_URL = _required("CONVEX_URL")        # e.g. https://happy-animal-123.convex.cloud
@@ -47,3 +44,14 @@ DEFAULT_MARKUP_PERCENT = float(os.getenv("DEFAULT_MARKUP_PERCENT", "30"))
 DEFAULT_MARKUP_FIXED = float(os.getenv("DEFAULT_MARKUP_FIXED", "0"))
 MIN_TOPUP = float(os.getenv("MIN_TOPUP", "1"))
 MAX_TOPUP = float(os.getenv("MAX_TOPUP", "1000"))
+
+# --- Binance Pay (merchant) ---
+BINANCE_PAY_PARTNER_ID = os.getenv("BINANCE_PAY_PARTNER_ID", "")
+BINANCE_PAY_PARTNER_KEY = os.getenv("BINANCE_PAY_PARTNER_KEY", "")
+
+# --- BEP-20 / BSC ---
+BSC_DEPOSIT_ADDRESS = os.getenv("BSC_DEPOSIT_ADDRESS", "")
+# USDT-BEP20 contract on BSC mainnet
+USDT_BEP20_CONTRACT = os.getenv("USDT_BEP20_CONTRACT", "0x55d398326f99059fF775485246999027B3197955")
+# Free public BSC RPC
+BSC_RPC_URL = os.getenv("BSC_RPC_URL", "https://bsc-dataseed.binance.org/")

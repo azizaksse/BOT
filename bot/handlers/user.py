@@ -12,14 +12,13 @@ from aiogram.types import InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import db
-from config import ADMIN_IDS, MAX_TOPUP, MIN_TOPUP, SUPPORT_USERNAME
-from cryptopay import CryptoPay
+from config import ADMIN_IDS, BSC_DEPOSIT_ADDRESS, MAX_TOPUP, MIN_TOPUP, SUPPORT_USERNAME
 from i18n import LANGS, t
 from keyboards import back_kb, lang_kb, main_menu_kb, topup_kb
 from money import fmt, to_cents
 from nexa_api import NexaClient
 from pricing import get_pricing, price_for
-from services import payments, purchase
+from services import bsc_pay, purchase
 from utils import esc, fmt_date, notify_admins, safe_edit
 
 log = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ PAGE_SIZE = 16
 
 
 class TopUp(StatesGroup):
-    amount = State()
+    bsc_amount = State()   # waiting for BEP-20 amount input
 
 
 class FindOrder(StatesGroup):
@@ -302,37 +301,107 @@ async def _create_topup(msg: Message, uid: int, lang: str, cp: CryptoPay, amount
 
 
 @router.callback_query(F.data.startswith("top:"))
-async def cb_topup(c: CallbackQuery, lang: str, cp: CryptoPay, state: FSMContext):
+async def cb_topup(c: CallbackQuery, lang: str, state: FSMContext):
+    """All top-up buttons (preset amounts + custom) go straight to BEP-20 flow."""
     val = c.data.split(":")[1]
     await c.answer()
-    if val == "custom":
-        await state.set_state(TopUp.amount)
-        return await c.message.answer(t(lang, "enter_amount", min=MIN_TOPUP, max=MAX_TOPUP))
-    await _create_topup(c.message, c.from_user.id, lang, cp, float(val))
-
-
-@router.callback_query(F.data.startswith("chk:"))
-async def cb_check(c: CallbackQuery, lang: str, cp: CryptoPay, bot: Bot):
-    invoice_id = int(c.data.split(":")[1])
-    inv = await db.get_invoice(invoice_id)
-    if not inv or inv["user_id"] != c.from_user.id:
-        return await c.answer()
-    try:
-        status = await payments.check_invoice(bot, cp, invoice_id)
-    except Exception:
-        return await c.answer(t(lang, "service_unavailable"), show_alert=True)
-    if status == "paid":
-        await c.answer("✅")
-        try:
-            await c.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-    elif status == "already":
-        await c.answer(t(lang, "payment_already"), show_alert=True)
-    elif status == "expired":
-        await c.answer(t(lang, "payment_expired"), show_alert=True)
+    if val == "bsc":
+        pass  # handled by cb_topup_bsc below
     else:
-        await c.answer(t(lang, "payment_pending"), show_alert=True)
+        # preset amount or custom — pre-fill and show BEP-20 screen
+        await state.set_state(TopUp.bsc_amount)
+        addr = BSC_DEPOSIT_ADDRESS
+        amount_hint = f" of <b>{val} USDT</b>" if val != "custom" else ""
+        text = (
+            f"🔗 <b>BEP-20 (BSC) Top-Up</b>\n\n"
+            f"Send <b>USDT-BEP20</b>{amount_hint} to:\n"
+            f"<code>{addr}</code>\n\n"
+            f"Then type the <b>exact amount you sent</b> and I will "
+            f"watch the blockchain and credit your wallet automatically.\n\n"
+            f"⏳ Confirmation window: <b>30 minutes</b>\n"
+            f"⚠️ Only send on the <b>BNB Smart Chain (BSC/BEP-20)</b> network!"
+        )
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [Btn(text="❌ Cancel", callback_data="wallet")]
+        ])
+        await c.message.answer(text, reply_markup=kb)
+
+
+# ======================= BEP-20 TOP-UP =======================
+@router.callback_query(F.data == "top:bsc")
+async def cb_topup_bsc(c: CallbackQuery, lang: str, state: FSMContext):
+    """Show deposit address and ask for amount."""
+    await c.answer()
+    await state.set_state(TopUp.bsc_amount)
+    addr = BSC_DEPOSIT_ADDRESS
+    text = (
+        f"🔗 <b>BEP-20 (BSC) Top-Up</b>\n\n"
+        f"Send <b>USDT-BEP20</b> to this address:\n"
+        f"<code>{addr}</code>\n\n"
+        f"Then type the <b>amount you sent</b> (e.g. <code>10</code>) "
+        f"and I will watch the blockchain and credit your wallet automatically.\n\n"
+        f"⏳ Confirmation window: <b>30 minutes</b>\n"
+        f"⚠️ Only send on the <b>BNB Smart Chain (BSC/BEP-20)</b> network!"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="❌ Cancel", callback_data="wallet")]
+    ])
+    await c.message.answer(text, reply_markup=kb)
+
+
+@router.message(TopUp.bsc_amount, F.text)
+async def st_bsc_amount(m: Message, lang: str, bot: Bot, state: FSMContext):
+    """User typed the amount they sent; start blockchain poller."""
+    try:
+        amount = round(float(m.text.replace(",", ".").replace("$", "").strip()), 2)
+    except ValueError:
+        amount = -1
+    if not (MIN_TOPUP <= amount <= MAX_TOPUP):
+        return await m.answer(t(lang, "invalid_amount", min=MIN_TOPUP, max=MAX_TOPUP))
+    await state.clear()
+    uid = m.from_user.id
+
+    # snapshot balance BEFORE so we detect the delta
+    baseline = await bsc_pay.get_bep20_balance()
+
+    await m.answer(
+        f"⏳ <b>Waiting for your BEP-20 payment of {amount:.2f} USDT…</b>\n\n"
+        f"I'm watching the blockchain. This may take a few minutes.\n"
+        f"You'll get a message as soon as I see the funds arrive."
+    )
+
+    async def _poller():
+        paid = await bsc_pay.wait_for_payment(amount, baseline)
+        if paid:
+            cents = to_cents(amount)
+            await db.credit(uid, cents, "bsc_topup")
+            user = await db.get_user(uid)
+            try:
+                await bot.send_message(
+                    uid,
+                    f"✅ <b>Payment received!</b>\n"
+                    f"<b>+{amount:.2f} USDT</b> has been added to your wallet.\n"
+                    f"New balance: <b>{fmt(user['balance'])}</b>",
+                )
+            except Exception:
+                pass
+            await notify_admins(
+                bot,
+                f"💵 BEP-20 top-up <b>+{amount:.2f} USDT</b> from user <code>{uid}</code>"
+            )
+        else:
+            try:
+                await bot.send_message(
+                    uid,
+                    "⌛ <b>Payment not detected</b>\n\n"
+                    "No payment arrived within 30 minutes. "
+                    "Please try again or contact support."
+                )
+            except Exception:
+                pass
+
+    import asyncio
+    asyncio.create_task(_poller())
 
 
 # ======================= ORDERS / FIND =======================

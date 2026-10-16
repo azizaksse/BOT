@@ -24,6 +24,7 @@ def topup_kb(lang: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.row(*[Btn(text=f"{a} $", callback_data=f"top:{a}") for a in (5, 10, 25, 50)])
     kb.row(Btn(text=t(lang, "btn_custom"), callback_data="top:custom"))
+    kb.row(Btn(text="🔗 BEP-20 / BSC (USDT)", callback_data="top:bsc"))
     kb.row(Btn(text=t(lang, "btn_orders"), callback_data="orders"),
            Btn(text=t(lang, "btn_back"), callback_data="menu"))
     return kb.as_markup()
