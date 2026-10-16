@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm ci && npx convex deploy",
+  "buildCommand": "npm install && npx convex deploy",
   "functions": {
     "api/index.py": { "maxDuration": 60, "includeFiles": "bot/**" }
   }
