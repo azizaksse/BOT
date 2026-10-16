@@ -10,12 +10,15 @@ from aiogram.client.telegram import TelegramAPIServer
 from aiogram.types import BotCommand, Update
 
 import db
-from config import (BOT_TOKEN, CRYPTOPAY_TESTNET, CRYPTOPAY_TOKEN, NEXA_API_KEY, NEXA_BASE_URL,
+from config import (BOT_TOKEN, BASTAHA_API_KEY, BASTAHA_BASE_URL, CRYPTOPAY_TESTNET,
+                    CRYPTOPAY_TOKEN, NEXA_API_KEY, NEXA_BASE_URL,
                     TELEGRAM_API_BASE, WEBHOOK_SECRET)
+from bastaha_api import BastahaClient
 from cryptopay import CryptoPay
 from handlers import admin, user
 from i18n import COMMANDS
 from middlewares import UserMiddleware
+from multi_supplier import MultiSupplier
 from nexa_api import NexaClient
 from services import payments
 from storage import PgStorage
@@ -39,11 +42,13 @@ async def request_context():
     await db.connect()
     bot = _make_bot()
     nexa = NexaClient(NEXA_BASE_URL, NEXA_API_KEY)
+    bastaha = BastahaClient(BASTAHA_BASE_URL, BASTAHA_API_KEY) if BASTAHA_API_KEY else None
+    supplier = MultiSupplier(nexa, bastaha)
     cp = CryptoPay(CRYPTOPAY_TOKEN, testnet=CRYPTOPAY_TESTNET)
     try:
-        yield bot, nexa, cp
+        yield bot, supplier, cp
     finally:
-        await nexa.close()
+        await supplier.close()
         await cp.close()
         await bot.session.close()
         await db.close()

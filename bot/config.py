@@ -25,6 +25,10 @@ TELEGRAM_API_BASE = os.getenv("TELEGRAM_API_BASE", "")  # leave empty (only for 
 NEXA_BASE_URL = os.getenv("NEXA_BASE_URL", "http://186.241.26.133:3000/api/v1")
 NEXA_API_KEY = _required("NEXA_API_KEY")
 
+# --- Bastaha supplier API ---
+BASTAHA_BASE_URL = os.getenv("BASTAHA_BASE_URL", "https://admin.bastaha.com/api/reseller")
+BASTAHA_API_KEY = os.getenv("BASTAHA_API_KEY", "")
+
 # --- CryptoBot ---
 CRYPTOPAY_TOKEN = _required("CRYPTOPAY_TOKEN")
 CRYPTOPAY_TESTNET = os.getenv("CRYPTOPAY_TESTNET", "false").lower() in ("1", "true", "yes")
