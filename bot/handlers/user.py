@@ -40,6 +40,10 @@ class WarrantyForm(StatesGroup):
     issue = State()
 
 
+class SupportMsg(StatesGroup):
+    message = State()
+
+
 # ======================= MENU =======================
 async def _menu_text(uid: int, lang: str) -> str:
     user = await db.get_user(uid)
@@ -391,10 +395,11 @@ async def cb_word(c: CallbackQuery, lang: str, state: FSMContext):
 
 # ======================= SUPPORT =======================
 def _support_view(lang: str):
-    if not SUPPORT_USERNAME:
-        return t(lang, "support_none"), back_kb(lang)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [Btn(text=t(lang, "btn_contact"), url=f"https://t.me/{SUPPORT_USERNAME}")],
+        [Btn(text="📨 " + t(lang, "btn_contact"), callback_data="support_msg")],
+        *([
+            [Btn(text="💬 " + t(lang, "btn_contact") + " (Telegram)", url=f"https://t.me/{SUPPORT_USERNAME}")]
+        ] if SUPPORT_USERNAME else []),
         [Btn(text=t(lang, "btn_back"), callback_data="menu")],
     ])
     return t(lang, "support_text"), kb
@@ -408,10 +413,40 @@ async def cmd_support(m: Message, lang: str, state: FSMContext):
 
 
 @router.callback_query(F.data == "support")
-async def cb_support(c: CallbackQuery, lang: str):
+async def cb_support(c: CallbackQuery, lang: str, state: FSMContext):
+    await state.clear()
     text, kb = _support_view(lang)
     await safe_edit(c, text, kb)
     await c.answer()
+
+
+@router.callback_query(F.data == "support_msg")
+async def cb_support_msg(c: CallbackQuery, lang: str, state: FSMContext):
+    await state.set_state(SupportMsg.message)
+    await c.answer()
+    await safe_edit(c, "📨 <b>Send us a message</b>\n\nType your question or issue below — we'll get back to you soon!",
+                    InlineKeyboardMarkup(inline_keyboard=[[Btn(text=t(lang, "btn_cancel"), callback_data="support")]]))
+
+
+@router.message(SupportMsg.message, F.text | F.photo)
+async def st_support_msg(m: Message, lang: str, state: FSMContext, bot: Bot):
+    await state.clear()
+    text = (m.text or m.caption or "(media)").strip()[:2000]
+    who = f"@{esc(m.from_user.username)}" if m.from_user.username else esc(m.from_user.full_name)
+    await notify_admins(
+        bot,
+        f"🎧 <b>Support message</b> from {who} (<code>{m.from_user.id}</code>)\n\n"
+        f"{esc(text)}\n\n"
+        f"Reply: <code>/dm {m.from_user.id} your reply here</code>"
+    )
+    if m.photo:
+        for admin_id in ADMIN_IDS:
+            try:
+                await m.copy_to(admin_id)
+            except Exception:
+                pass
+    await m.answer("✅ <b>Message sent!</b>\n\nOur team will reply to you here soon.",
+                   reply_markup=InlineKeyboardMarkup(inline_keyboard=[[Btn(text=t(lang, "btn_menu"), callback_data="menu")]]))
 
 
 # ======================= TEXT INPUT STATES (keep last) =======================

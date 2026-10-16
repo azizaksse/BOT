@@ -19,15 +19,15 @@ log = logging.getLogger(__name__)
 router = Router()
 router.message.filter(F.from_user.id.in_(ADMIN_IDS))
 
-HELP = """🛠 <b>Admin panel</b>
+HELP = """⚡ <b>Admin panel</b>
 
 <b>Stats</b>
 /stats — sales, profit, users
-/nexabal — your Nexa supplier balance
+/nexabal — Nexa supplier balance
 
 <b>Pricing</b>
 /markup — show markup
-/markup 30 0.10 — set +30% and +0.10$ on every product
+/markup 30 0.10 — set +30% and +$0.10 on every product
 /aproducts — products with cost / sell price / short ID
 /setprice &lt;id&gt; &lt;price&gt; — custom price for one product
 /delprice &lt;id&gt; — remove custom price
@@ -36,6 +36,7 @@ HELP = """🛠 <b>Admin panel</b>
 /user &lt;user_id&gt; — user info
 /addbal &lt;user_id&gt; &lt;amount&gt; — add (or remove with -) balance
 /ban &lt;user_id&gt; · /unban &lt;user_id&gt;
+/dm &lt;user_id&gt; &lt;text&gt; — reply to a support message
 
 <b>Orders</b>
 /find &lt;order_id&gt; — view any order
@@ -46,8 +47,11 @@ HELP = """🛠 <b>Admin panel</b>
 /wreply &lt;id&gt; &lt;text&gt; — reply to customer
 /wclose &lt;id&gt; — close request
 
-<b>Broadcast</b>
-/broadcast &lt;text&gt; — or reply to any message with /broadcast"""
+<b>Broadcasts</b>
+/broadcast &lt;text&gt; — send plain message to all users
+/announce &lt;text&gt; — send a rich announcement to all users
+/deal &lt;product_id&gt; &lt;your_price&gt; &lt;note&gt; — announce a limited deal
+/newstock — broadcast all products that are currently in stock"""
 
 
 def _args(command: CommandObject, n: int) -> list[str] | None:
@@ -281,5 +285,111 @@ async def cmd_broadcast(m: Message, command: CommandObject, bot: Bot):
             sent += 1
         except Exception:
             pass
-        await asyncio.sleep(0.05)  # stay under Telegram limits
+        await asyncio.sleep(0.05)
     await m.answer(f"✅ Delivered to {sent}/{len(ids)} users.")
+
+
+@router.message(Command("dm"))
+async def cmd_dm(m: Message, command: CommandObject, bot: Bot):
+    """Reply to a support message: /dm <user_id> <text>"""
+    a = _args(command, 2)
+    if not a or not a[0].isdigit():
+        return await m.answer("Usage: /dm &lt;user_id&gt; &lt;text&gt;")
+    uid = int(a[0])
+    try:
+        await bot.send_message(uid, f"🎧 <b>Support reply:</b>\n\n{esc(a[1])}")
+        await m.answer(f"✅ Message delivered to <code>{uid}</code>")
+    except Exception as e:
+        await m.answer(f"❌ Could not deliver: {esc(e)}")
+
+
+@router.message(Command("announce"))
+async def cmd_announce(m: Message, command: CommandObject, bot: Bot):
+    """Send a rich announcement to all users."""
+    source = m.reply_to_message
+    text = command.args or ""
+    if not source and not text:
+        return await m.answer("Usage: /announce &lt;text&gt; or reply to a message with /announce")
+    ids = await db.all_user_ids()
+    await m.answer(f"📢 Sending announcement to {len(ids)} users…")
+    sent = 0
+    announcement = f"📢 <b>Store Update!</b>\n\n{text}" if text else None
+    for uid in ids:
+        try:
+            if source:
+                await source.copy_to(uid)
+            else:
+                await bot.send_message(uid, announcement)
+            sent += 1
+        except Exception:
+            pass
+        await asyncio.sleep(0.05)
+    await m.answer(f"✅ Announcement delivered to {sent}/{len(ids)} users.")
+
+
+@router.message(Command("deal"))
+async def cmd_deal(m: Message, command: CommandObject, bot: Bot, nexa: NexaClient):
+    """Announce a limited-time deal: /deal <product_id> <price> [note]"""
+    parts = (command.args or "").split(maxsplit=2)
+    if len(parts) < 2:
+        return await m.answer("Usage: /deal &lt;product_id&gt; &lt;price&gt; [note]\nExample: /deal 91 1.99 Flash sale — 24h only!")
+    product = await _find_product(nexa, parts[0])
+    if not product:
+        return await m.answer("❌ Product not found.")
+    try:
+        sale_price = float(parts[1].replace(",", "."))
+    except ValueError:
+        return await m.answer("❌ Invalid price.")
+    note = parts[2] if len(parts) > 2 else "⏰ Limited time only!"
+    ids = await db.all_user_ids()
+    await m.answer(f"🔥 Sending deal to {len(ids)} users…")
+    msg = (
+        f"🔥 <b>LIMITED DEAL!</b>\n\n"
+        f"🏷 <b>{esc(product['name'])}</b>\n"
+        f"💵 Price: <b>${sale_price:.2f} USDT</b>\n"
+        f"⚡ Instant delivery\n\n"
+        f"{esc(note)}"
+    )
+    sent = 0
+    for uid in ids:
+        try:
+            await bot.send_message(uid, msg)
+            sent += 1
+        except Exception:
+            pass
+        await asyncio.sleep(0.05)
+    await m.answer(f"✅ Deal sent to {sent}/{len(ids)} users.")
+
+
+@router.message(Command("newstock"))
+async def cmd_newstock(m: Message, bot: Bot, nexa: NexaClient):
+    """Broadcast all currently in-stock products to all users."""
+    try:
+        products = await nexa.products(force=True)
+    except Exception as e:
+        return await m.answer(f"❌ Could not fetch products: {esc(e)}")
+    in_stock = [p for p in products if p.get("in_stock") and p.get("stock", 0) > 0]
+    if not in_stock:
+        return await m.answer("No products currently in stock.")
+    pricing = await get_pricing()
+    lines = []
+    for p in in_stock[:20]:
+        sell = price_for(p, pricing)
+        lines.append(f"✅ <b>{esc(p['name'])}</b> — <b>{fmt(sell)}$</b> · Stock: {p['stock']}")
+    msg = (
+        f"🛒 <b>Products Available Now!</b>\n\n"
+        + "\n".join(lines)
+        + "\n\n⚡ Instant delivery · Open the store to order!"
+    )
+    ids = await db.all_user_ids()
+    await m.answer(f"📦 Sending stock update to {len(ids)} users…")
+    sent = 0
+    for uid in ids:
+        try:
+            await bot.send_message(uid, msg)
+            sent += 1
+        except Exception:
+            pass
+        await asyncio.sleep(0.05)
+    await m.answer(f"✅ Stock update sent to {sent}/{len(ids)} users.")
+
