@@ -24,7 +24,7 @@ from utils import esc, fmt_date, notify_admins, safe_edit
 
 log = logging.getLogger(__name__)
 router = Router()
-PAGE_SIZE = 8
+PAGE_SIZE = 16
 
 
 class TopUp(StatesGroup):
@@ -100,7 +100,50 @@ async def cb_setlang(c: CallbackQuery):
 
 
 # ======================= PRODUCTS =======================
-async def _products_view(lang: str, nexa: NexaClient, page: int, force: bool = False):
+
+# ── product icon map ─────────────────────────────────────────────────────────
+_ICON_MAP = [
+    # AI tools
+    ("chatgpt",        "🤖"), ("gpt",            "🤖"), ("openai",         "🤖"),
+    ("claude",         "🧠"), ("gemini",          "✨"), ("grok",           "🔍"),
+    ("copilot",        "🤖"), ("perplexity",      "🔮"), ("midjourney",     "🎨"),
+    ("cursor",         "💻"), ("elevenlabs",      "🎙️"), ("eleven labs",    "🎙️"),
+    # Productivity / Office
+    ("microsoft",      "🖥️"), ("office",          "📊"), ("365",            "📊"),
+    ("windows",        "🖥️"), ("adobe",           "🎨"), ("figma",          "🎨"),
+    ("notion",         "📝"), ("autodessk",       "📐"), ("autodesk",       "📐"),
+    ("linkedin",       "💼"), ("grammarly",       "✍️"), ("scribd",         "📚"),
+    # Design / Media
+    ("canva",          "🎨"), ("capcut",          "🎬"), ("freepik",        "🖼️"),
+    ("ilovepdf",       "📄"), ("ilove",           "📄"), ("photoshop",      "🖼️"),
+    # Education
+    ("coursera",       "🎓"), ("duolingo",        "🗣️"), ("udemy",          "🎓"),
+    ("skillshare",     "🎓"), ("masterclass",     "🎓"),
+    # Security / VPN
+    ("vpn",            "🔒"), ("nordvpn",         "🔒"), ("expressvpn",     "🔒"),
+    ("1password",      "🔑"), ("lastpass",        "🔑"),
+    # Communication
+    ("gmail",          "📧"), ("mail",            "📧"), ("outlook",        "📧"),
+    ("zoom",           "📹"), ("slack",           "💬"), ("discord",        "💬"),
+    # Gaming
+    ("xbox",           "🎮"), ("playstation",     "🎮"), ("steam",          "🎮"),
+    ("minecraft",      "⛏️"),
+    # Other
+    ("kling",          "🎬"), ("peacock",         "🦚"), ("paramount",      "🎬"),
+    ("prime",          "📦"),
+]
+
+def _product_icon(name: str) -> str:
+    """Return a matching emoji for a product name, or a default."""
+    low = name.lower()
+    for keyword, icon in _ICON_MAP:
+        if keyword in low:
+            return icon
+    return "💎"
+
+
+# ── products view ─────────────────────────────────────────────────────────────
+async def _products_view(lang: str, nexa, page: int, force: bool = False):
     try:
         products = await nexa.products(force=force)
     except Exception as e:
@@ -112,9 +155,21 @@ async def _products_view(lang: str, nexa: NexaClient, page: int, force: bool = F
     pages = max(1, math.ceil(len(products) / PAGE_SIZE))
     page = max(0, min(page, pages - 1))
     kb = InlineKeyboardBuilder()
-    for p in products[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
-        icon = "🟢" if p.get("in_stock") and p.get("stock", 0) > 0 else "🔴"
-        kb.row(Btn(text=f"{icon} {p['name']} • {fmt(price_for(p, pricing))}$", callback_data=f"prod:{p['id']}"))
+
+    # 2-column grid — pair products up
+    page_products = products[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
+    for i in range(0, len(page_products), 2):
+        row = []
+        for p in page_products[i:i + 2]:
+            icon = _product_icon(p["name"])
+            stock_dot = "🟢" if p.get("in_stock") and p.get("stock", 0) > 0 else "🔴"
+            label = f"{icon}  {p['name']}"
+            if len(label) > 30:
+                label = label[:28] + "…"
+            row.append(Btn(text=f"{stock_dot} {label}", callback_data=f"prod:{p['id']}"))
+        kb.row(*row)
+
+    # navigation row
     nav = []
     if page > 0:
         nav.append(Btn(text="◀️", callback_data=f"plist:{page - 1}"))
@@ -125,6 +180,7 @@ async def _products_view(lang: str, nexa: NexaClient, page: int, force: bool = F
     kb.row(Btn(text=t(lang, "btn_refresh"), callback_data=f"plist:{page}:r"),
            Btn(text=t(lang, "btn_back"), callback_data="menu"))
     return t(lang, "products_title", page=page + 1, pages=pages), kb.as_markup()
+
 
 
 @router.message(Command("products"))
