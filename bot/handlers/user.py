@@ -154,6 +154,12 @@ async def cb_product(c: CallbackQuery, lang: str, nexa: NexaClient):
     price = price_for(p, await get_pricing())
     stock = int(p.get("stock", 0)) if p.get("in_stock") else 0
     text = t(lang, "product_card", name=esc(p["name"]), price=fmt(price), stock=stock)
+    # Show description if available
+    desc = (p.get("description") or "").strip()
+    if desc:
+        # Trim to keep message short
+        desc_short = desc[:600] + ("…" if len(desc) > 600 else "")
+        text += f"\n\n📝 <i>{esc(desc_short)}</i>"
     kb = InlineKeyboardBuilder()
     if stock > 0:
         text += "\n\n" + t(lang, "choose_qty")
