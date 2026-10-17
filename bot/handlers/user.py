@@ -13,6 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import db
 from config import ADMIN_IDS, BSC_DEPOSIT_ADDRESS, MAX_TOPUP, MIN_TOPUP, SUPPORT_USERNAME
+from cryptopay import CryptoPay
 from i18n import LANGS, t
 from keyboards import back_kb, lang_kb, main_menu_kb, topup_kb
 from money import fmt, to_cents
@@ -581,17 +582,6 @@ async def st_support_msg(m: Message, lang: str, state: FSMContext, bot: Bot):
 
 
 # ======================= TEXT INPUT STATES (keep last) =======================
-@router.message(TopUp.amount, F.text)
-async def st_topup_amount(m: Message, lang: str, cp: CryptoPay, state: FSMContext):
-    try:
-        amount = round(float(m.text.replace(",", ".").replace("$", "").strip()), 2)
-    except ValueError:
-        amount = -1
-    if not (MIN_TOPUP <= amount <= MAX_TOPUP):
-        return await m.answer(t(lang, "invalid_amount", min=MIN_TOPUP, max=MAX_TOPUP))
-    await state.clear()
-    await _create_topup(m, m.from_user.id, lang, cp, amount)
-
 
 @router.message(FindOrder.order_id, F.text)
 async def st_find(m: Message, lang: str, state: FSMContext):
