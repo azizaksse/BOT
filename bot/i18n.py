@@ -10,7 +10,7 @@ TEXTS = {
             "💰 Balance: <b>{balance} USDT</b>"
         ),
         "menu_title": (
-            "🏪 <b>NEXA STORE</b>\n"
+            "🏪 <b>GOLD1N BOT</b>\n"
             "━━━━━━━━━━━━━━━\n"
             "💰 Balance: <b>{balance} USDT</b>"
         ),
@@ -21,7 +21,7 @@ TEXTS = {
         "btn_support":  "💬  Support",
         "btn_lang":     "🌍  Language",
         "btn_back":     "‹ Back",
-        "btn_menu":     "🏪 Main Menu",
+        "btn_menu":     "🏪 GOLD1N BOT",
         "btn_refresh":  "🔄 Refresh",
         "btn_confirm":  "✅  Confirm & Pay",
         "btn_cancel":   "✖  Cancel",
@@ -157,7 +157,7 @@ TEXTS = {
             "💰 Solde : <b>{balance} USDT</b>"
         ),
         "menu_title": (
-            "🏪 <b>NEXA STORE</b>\n"
+            "🏪 <b>GOLD1N BOT</b>\n"
             "━━━━━━━━━━━━━━━\n"
             "💰 Solde : <b>{balance} USDT</b>"
         ),
@@ -168,7 +168,7 @@ TEXTS = {
         "btn_support":  "💬  Support",
         "btn_lang":     "🌍  Langue",
         "btn_back":     "‹ Retour",
-        "btn_menu":     "🏪 Menu principal",
+        "btn_menu":     "🏪 GOLD1N BOT",
         "btn_refresh":  "🔄 Actualiser",
         "btn_confirm":  "✅  Confirmer et payer",
         "btn_cancel":   "✖  Annuler",
@@ -304,7 +304,7 @@ TEXTS = {
             "💰 الرصيد: <b>{balance} USDT</b>"
         ),
         "menu_title": (
-            "🏪 <b>NEXA STORE</b>\n"
+            "🏪 <b>GOLD1N BOT</b>\n"
             "━━━━━━━━━━━━━━━\n"
             "💰 الرصيد: <b>{balance} USDT</b>"
         ),
@@ -315,7 +315,7 @@ TEXTS = {
         "btn_support":  "💬  الدعم",
         "btn_lang":     "🌍  اللغة",
         "btn_back":     "‹ رجوع",
-        "btn_menu":     "🏪 القائمة",
+        "btn_menu":     "🏪 GOLD1N BOT",
         "btn_refresh":  "🔄 تحديث",
         "btn_confirm":  "✅  تأكيد والدفع",
         "btn_cancel":   "✖  إلغاء",

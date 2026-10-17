@@ -272,7 +272,7 @@ DASH = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Bot Admin Dashboard</title>
+<title>GOLD1N BOT Admin Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -386,7 +386,7 @@ tr:hover td{background:rgba(124,111,255,.04)}
 <div id="app">
   <div class="topbar">
     <div class="tl">
-      <div class="ttitle">⚡ @golde1nbot Admin</div>
+      <div class="ttitle">⚡ GOLD1N BOT Admin</div>
     </div>
     <div class="tr">
       <div class="live"><div class="dot"></div><div class="lt2">Live</div></div>
