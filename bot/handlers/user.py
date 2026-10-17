@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import db
-from config import ADMIN_IDS, BSC_DEPOSIT_ADDRESS, MAX_TOPUP, MIN_TOPUP, SUPPORT_USERNAME
+from config import ADMIN_IDS, BSC_DEPOSIT_ADDRESS, BINANCE_PAY_PARTNER_ID, BINANCE_PAY_PARTNER_KEY, MAX_TOPUP, MIN_TOPUP, SUPPORT_USERNAME
 from cryptopay import CryptoPay
 from i18n import LANGS, t
 from keyboards import back_kb, lang_kb, main_menu_kb, topup_kb
@@ -29,6 +29,7 @@ PAGE_SIZE = 16
 
 class TopUp(StatesGroup):
     bsc_amount = State()   # waiting for BEP-20 amount input
+    binance_amount = State()  # waiting for Binance Pay amount input
 
 
 class FindOrder(StatesGroup):
@@ -348,6 +349,73 @@ async def cb_topup_bsc(c: CallbackQuery, lang: str, state: FSMContext):
         [Btn(text="❌ Cancel", callback_data="wallet")]
     ])
     await c.message.answer(text, reply_markup=kb)
+
+
+# ======================= BINANCE PAY TOP-UP =======================
+@router.callback_query(F.data == "top:binance")
+async def cb_topup_binance(c: CallbackQuery, lang: str, state: FSMContext):
+    """Ask user how much they want to top up via Binance Pay."""
+    await c.answer()
+    await state.set_state(TopUp.binance_amount)
+    text = (
+        f"💛 <b>Binance Pay Top-Up</b>\n\n"
+        f"Type the amount in USDT you want to deposit\n"
+        f"(minimum <b>{MIN_TOPUP} USDT</b>, maximum <b>{MAX_TOPUP} USDT</b>):\n\n"
+        f"Example: <code>10</code>"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="❌ Cancel", callback_data="wallet")]
+    ])
+    await c.message.answer(text, reply_markup=kb)
+
+
+@router.message(TopUp.binance_amount, F.text)
+async def st_binance_amount(m: Message, lang: str, bot: Bot, state: FSMContext):
+    """User typed an amount — create a Binance Pay order and send checkout link."""
+    try:
+        amount = round(float(m.text.replace(",", ".").replace("$", "").strip()), 2)
+    except ValueError:
+        amount = -1
+    if not (MIN_TOPUP <= amount <= MAX_TOPUP):
+        return await m.answer(t(lang, "invalid_amount", min=MIN_TOPUP, max=MAX_TOPUP))
+    await state.clear()
+    uid = m.from_user.id
+    # Use a unique trade number: uid + timestamp (ms)
+    import time as _time
+    trade_no = f"TU{uid}{int(_time.time() * 1000)}"
+    try:
+        from binance_helpers import create_binance_pay_order
+        result = await create_binance_pay_order(
+            partner_id=BINANCE_PAY_PARTNER_ID,
+            partner_key=BINANCE_PAY_PARTNER_KEY,
+            order_id=trade_no,
+            amount=amount,
+            description=f"GOLD1N BOT wallet top-up {amount:.2f} USDT",
+        )
+        checkout_url = (result.get("data") or {}).get("checkoutUrl", "")
+        if not checkout_url:
+            raise ValueError(f"No checkoutUrl in response: {result}")
+    except Exception as e:
+        log.error("Binance Pay create order failed: %s", e)
+        return await m.answer(
+            "⚠️ <b>Could not create Binance Pay order.</b>\n"
+            "Please try BEP-20 or contact support."
+        )
+    # Store pending payment: key = "binpay:{trade_no}", value = "{uid}:{cents}"
+    import json as _json
+    cents = to_cents(amount)
+    await db.set_setting(f"binpay:{trade_no}", _json.dumps({"uid": uid, "cents": cents}))
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [Btn(text="💛 Pay with Binance Pay", url=checkout_url)],
+        [Btn(text=t(lang, "btn_menu"), callback_data="menu")],
+    ])
+    await m.answer(
+        f"💛 <b>Binance Pay Invoice</b>\n\n"
+        f"Amount: <b>{amount:.2f} USDT</b>\n\n"
+        f"Tap the button below to complete payment.\n"
+        f"Your balance will be credited automatically after confirmation.",
+        reply_markup=kb,
+    )
 
 
 @router.message(TopUp.bsc_amount, F.text)

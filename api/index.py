@@ -37,6 +37,58 @@ async def telegram(request: Request):
     return JSONResponse({"ok": True})
 
 
+async def binance_pay_webhook(request: Request):
+    """Binance Pay calls this when a payment is completed."""
+    import json as _json
+    try:
+        body = await request.json()
+        biz_type = body.get("bizType", "")
+        biz_status = body.get("bizStatus", "")
+        trade_no = (body.get("data") or {}).get("merchantTradeNo", "")
+        if biz_type != "PAY" or biz_status != "PAY_SUCCESS" or not trade_no:
+            return JSONResponse({"returnCode": "SUCCESS", "returnMessage": None})
+
+        async with core.request_context() as (bot, _):
+            import db
+            raw = await db.get_setting(f"binpay:{trade_no}", "")
+            if not raw:
+                log.warning("Binance Pay webhook: unknown trade_no %s", trade_no)
+                return JSONResponse({"returnCode": "SUCCESS", "returnMessage": None})
+            # Dedup: delete immediately so double callbacks don't double-credit
+            await db.set_setting(f"binpay:{trade_no}", "")
+            info = _json.loads(raw)
+            uid, cents = int(info["uid"]), int(info["cents"])
+            ok = await db.credit(uid, cents, "binance_pay", trade_no)
+            if ok:
+                from config import ADMIN_IDS
+                from i18n import t
+                from money import fmt
+                user = await db.get_user(uid)
+                lang = user.get("lang", "en") if user else "en"
+                try:
+                    await bot.send_message(
+                        uid,
+                        f"✅ <b>Binance Pay — Payment received!</b>\n"
+                        f"<b>+{fmt(cents)} USDT</b> has been added to your wallet.\n"
+                        f"New balance: <b>{fmt(user['balance'])} USDT</b>"
+                    )
+                except Exception:
+                    pass
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await bot.send_message(
+                            admin_id,
+                            f"💛 Binance Pay top-up <b>+{fmt(cents)} USDT</b> "
+                            f"from user <code>{uid}</code>"
+                        )
+                    except Exception:
+                        pass
+        return JSONResponse({"returnCode": "SUCCESS", "returnMessage": None})
+    except Exception:
+        log.exception("Binance Pay webhook error")
+        return JSONResponse({"returnCode": "SUCCESS", "returnMessage": None})
+
+
 # ── setup ─────────────────────────────────────────────────────────────────────
 
 async def setup(request: Request):
@@ -656,8 +708,9 @@ async def home(request: Request):
 
 
 app = Starlette(routes=[
-    Route("/api/telegram",          telegram,       methods=["POST"]),
-    Route("/api/setup",             setup,          methods=["GET"]),
+    Route("/api/telegram",              telegram,               methods=["POST"]),
+    Route("/api/binance-pay-webhook",   binance_pay_webhook,    methods=["POST"]),
+    Route("/api/setup",                 setup,                  methods=["GET"]),
     Route("/api/stats",             stats_api,      methods=["GET"]),
     Route("/api/admin/products",    products_api,   methods=["GET"]),
     Route("/api/admin/setprice",    setprice_api,   methods=["POST"]),
