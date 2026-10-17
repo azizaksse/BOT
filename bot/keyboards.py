@@ -23,11 +23,23 @@ def back_kb(lang: str, to: str = "menu") -> InlineKeyboardMarkup:
 def topup_kb(lang: str) -> InlineKeyboardMarkup:
     from config import BINANCE_PAY_PARTNER_ID
     kb = InlineKeyboardBuilder()
+    # Row 1: preset amounts
     kb.row(*[Btn(text=f"{a} $", callback_data=f"top:{a}") for a in (5, 10, 25, 50)])
     kb.row(Btn(text=t(lang, "btn_custom"), callback_data="top:custom"))
-    kb.row(Btn(text="🔗 BEP-20 / BSC (USDT)", callback_data="top:bsc"))
-    if BINANCE_PAY_PARTNER_ID:
-        kb.row(Btn(text="💛 Binance Pay (USDT)", callback_data="top:binance"))
+    # Row 2: CARD
+    kb.row(Btn(text="💳  CARD (Visa · Mastercard)", callback_data="top:card"))
+    # Row 3: Binance Pay
+    kb.row(Btn(text="🔶  Binance Pay (USDT/USDC/BTC)", callback_data="top:binance"))
+    # Row 4: BEP-20 pair
+    kb.row(
+        Btn(text="🟢  USDT (BEP20 · BSC)",  callback_data="top:bsc"),
+        Btn(text="🔵  USDC (BEP20 · BSC)",  callback_data="top:usdc_bsc"),
+    )
+    # Row 5: Polygon + TON
+    kb.row(
+        Btn(text="🟣  USDT (Polygon)",       callback_data="top:polygon"),
+        Btn(text="💎  USDT TON",              callback_data="top:ton"),
+    )
     kb.row(Btn(text=t(lang, "btn_orders"), callback_data="orders"),
            Btn(text=t(lang, "btn_back"), callback_data="menu"))
     return kb.as_markup()

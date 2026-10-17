@@ -302,31 +302,67 @@ async def _create_topup(msg: Message, uid: int, lang: str, cp: CryptoPay, amount
     await msg.answer(t(lang, "invoice_created", amount=f"{amount:.2f}"), reply_markup=kb)
 
 
+_COMING_SOON_KB = lambda: InlineKeyboardMarkup(inline_keyboard=[
+    [Btn(text="‹ Back", callback_data="wallet")]
+])
+
+
+def _coming_soon_text(method: str) -> str:
+    return (
+        f"🔜 <b>{method}</b>\n\n"
+        f"This payment method is <b>coming soon!</b>\n"
+        f"Please use <b>BEP-20 (BSC)</b> or <b>Binance Pay</b> in the meantime."
+    )
+
+
 @router.callback_query(F.data.startswith("top:"))
 async def cb_topup(c: CallbackQuery, lang: str, state: FSMContext):
-    """All top-up buttons (preset amounts + custom) go straight to BEP-20 flow."""
+    """Route preset amounts and custom input to BEP-20 flow (default crypto)."""
     val = c.data.split(":")[1]
     await c.answer()
-    if val == "bsc":
-        pass  # handled by cb_topup_bsc below
-    else:
-        # preset amount or custom — pre-fill and show BEP-20 screen
-        await state.set_state(TopUp.bsc_amount)
-        addr = BSC_DEPOSIT_ADDRESS
-        amount_hint = f" of <b>{val} USDT</b>" if val != "custom" else ""
-        text = (
-            f"🔗 <b>BEP-20 (BSC) Top-Up</b>\n\n"
-            f"Send <b>USDT-BEP20</b>{amount_hint} to:\n"
-            f"<code>{addr}</code>\n\n"
-            f"Then type the <b>exact amount you sent</b> and I will "
-            f"watch the blockchain and credit your wallet automatically.\n\n"
-            f"⏳ Confirmation window: <b>30 minutes</b>\n"
-            f"⚠️ Only send on the <b>BNB Smart Chain (BSC/BEP-20)</b> network!"
-        )
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [Btn(text="❌ Cancel", callback_data="wallet")]
-        ])
-        await c.message.answer(text, reply_markup=kb)
+    # Specific methods have their own handlers — only handle presets & custom here
+    if val in ("bsc", "binance", "card", "usdc_bsc", "polygon", "ton"):
+        return  # handled by dedicated handlers below
+    # preset amount or custom → BEP-20 flow
+    await state.set_state(TopUp.bsc_amount)
+    addr = BSC_DEPOSIT_ADDRESS
+    amount_hint = f" of <b>{val} USDT</b>" if val != "custom" else ""
+    text = (
+        f"🟢 <b>USDT (BEP20 · BSC) Top-Up</b>\n\n"
+        f"Send <b>USDT-BEP20</b>{amount_hint} to:\n"
+        f"<code>{addr}</code>\n\n"
+        f"Then type the <b>exact amount you sent</b> and I will "
+        f"watch the blockchain and credit your wallet automatically.\n\n"
+        f"⏳ Confirmation window: <b>30 minutes</b>\n"
+        f"⚠️ Only send on the <b>BNB Smart Chain (BSC/BEP-20)</b> network!"
+    )
+    kb = InlineKeyboardMarkup(inline_keyboard=[[Btn(text="❌ Cancel", callback_data="wallet")]])
+    await c.message.answer(text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "top:card")
+async def cb_topup_card(c: CallbackQuery, lang: str):
+    await c.answer()
+    await c.message.answer(_coming_soon_text("CARD (Visa · Mastercard)"), reply_markup=_COMING_SOON_KB())
+
+
+@router.callback_query(F.data == "top:usdc_bsc")
+async def cb_topup_usdc_bsc(c: CallbackQuery, lang: str):
+    await c.answer()
+    await c.message.answer(_coming_soon_text("USDC (BEP20 · BSC)"), reply_markup=_COMING_SOON_KB())
+
+
+@router.callback_query(F.data == "top:polygon")
+async def cb_topup_polygon(c: CallbackQuery, lang: str):
+    await c.answer()
+    await c.message.answer(_coming_soon_text("USDT (Polygon)"), reply_markup=_COMING_SOON_KB())
+
+
+@router.callback_query(F.data == "top:ton")
+async def cb_topup_ton(c: CallbackQuery, lang: str):
+    await c.answer()
+    await c.message.answer(_coming_soon_text("USDT TON"), reply_markup=_COMING_SOON_KB())
+
 
 
 # ======================= BEP-20 TOP-UP =======================
